@@ -7,6 +7,14 @@ import { useAI } from '../../hooks/useAI';
 
 interface RelationshipInterfaceProps {
   onBack: () => void;
+  relationships?: Array<{
+    npcId: string;
+    npcName: string;
+    affinity: number;
+    status: string;
+    lastInteraction: string;
+  }>;
+  updateRelationship?: (npcId: string, affinityChange: number, newInteraction: string) => void;
 }
 
 interface Character {
@@ -26,22 +34,27 @@ interface ChatMessage {
   timestamp: Date;
 }
 
-export const RelationshipInterface: React.FC<RelationshipInterfaceProps> = ({ onBack }) => {
+export const RelationshipInterface: React.FC<RelationshipInterfaceProps> = ({ 
+  onBack, 
+  relationships = [],
+  updateRelationship
+}) => {
   const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
   const [chatMode, setChatMode] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [playerMessage, setPlayerMessage] = useState('');
   const { isLoading, chatWithNPC } = useAI();
 
-  const characters: Character[] = [
+  // Default characters if no relationships provided
+  const defaultCharacters: Character[] = [
     {
       id: '1',
       name: 'Dr. Sarah Chen',
       role: 'Médica',
       personality: 'Pragmática e cuidadosa',
-      relationship: 75,
+      relationship: relationships.find(r => r.npcId === '1')?.affinity || 75,
       status: 'Amigável',
-      lastInteraction: 'Ajudou você a tratar um ferimento ontem',
+      lastInteraction: relationships.find(r => r.npcId === '1')?.lastInteraction || 'Ajudou você a tratar um ferimento ontem',
       backstory: 'Médica experiente que estava voltando de uma conferência médica quando o navio naufragou.'
     },
     {
@@ -49,9 +62,9 @@ export const RelationshipInterface: React.FC<RelationshipInterfaceProps> = ({ on
       name: 'Marcus Rodriguez',
       role: 'Ex-Militar',
       personality: 'Disciplinado e protetor',
-      relationship: 60,
+      relationship: relationships.find(r => r.npcId === '2')?.affinity || 60,
       status: 'Neutro',
-      lastInteraction: 'Discordou sobre as prioridades de exploração',
+      lastInteraction: relationships.find(r => r.npcId === '2')?.lastInteraction || 'Discordou sobre as prioridades de exploração',
       backstory: 'Veterano de guerra que trabalha como instrutor de sobrevivência.'
     },
     {
@@ -59,9 +72,9 @@ export const RelationshipInterface: React.FC<RelationshipInterfaceProps> = ({ on
       name: 'Elena Volkov',
       role: 'Engenheira',
       personality: 'Inteligente mas reservada',
-      relationship: 45,
+      relationship: relationships.find(r => r.npcId === '3')?.affinity || 45,
       status: 'Desconfiado',
-      lastInteraction: 'Questionou suas decisões sobre recursos',
+      lastInteraction: relationships.find(r => r.npcId === '3')?.lastInteraction || 'Questionou suas decisões sobre recursos',
       backstory: 'Engenheira de sistemas que suspeita que o naufrágio não foi acidental.'
     }
   ];
@@ -93,14 +106,15 @@ export const RelationshipInterface: React.FC<RelationshipInterfaceProps> = ({ on
     };
 
     setChatMessages(prev => [...prev, newPlayerMessage]);
+    const currentMessage = playerMessage;
     setPlayerMessage('');
 
     try {
-      const context = `Situação: Sobreviventes em uma ilha misteriosa. Relacionamento atual: ${selectedCharacter.relationship}%. Status: ${selectedCharacter.status}`;
+      const context = `Situação: Sobreviventes na Isla Pangaea. Relacionamento atual: ${selectedCharacter.relationship}%. Status: ${selectedCharacter.status}. Última interação: ${selectedCharacter.lastInteraction}`;
       const npcResponse = await chatWithNPC(
         selectedCharacter.name,
         selectedCharacter.personality,
-        playerMessage,
+        currentMessage,
         context
       );
 
@@ -111,8 +125,26 @@ export const RelationshipInterface: React.FC<RelationshipInterfaceProps> = ({ on
       };
 
       setChatMessages(prev => [...prev, npcMessage]);
+
+      // Update relationship based on interaction
+      if (updateRelationship) {
+        const affinityChange = Math.floor(Math.random() * 10) - 3; // -3 to +6 change
+        updateRelationship(selectedCharacter.id, affinityChange, `Conversou sobre: ${currentMessage.substring(0, 50)}...`);
+        
+        // Update local character state
+        setSelectedCharacter(prev => prev ? {
+          ...prev,
+          relationship: Math.max(0, Math.min(100, prev.relationship + affinityChange))
+        } : null);
+      }
     } catch (error) {
       console.error('Erro no chat:', error);
+      const errorMessage: ChatMessage = {
+        sender: 'npc',
+        content: 'Desculpe, não consegui processar sua mensagem no momento.',
+        timestamp: new Date()
+      };
+      setChatMessages(prev => [...prev, errorMessage]);
     }
   };
 
@@ -240,7 +272,7 @@ export const RelationshipInterface: React.FC<RelationshipInterfaceProps> = ({ on
 
       {!selectedCharacter ? (
         <div className="space-y-4">
-          {characters.map((character) => (
+          {defaultCharacters.map((character) => (
             <Card 
               key={character.id}
               className="bg-slate-800/70 border-slate-700 hover:bg-slate-800 transition-colors cursor-pointer"
