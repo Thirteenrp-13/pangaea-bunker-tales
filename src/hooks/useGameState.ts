@@ -95,7 +95,7 @@ export const useGameState = (playerCharacter: PlayerCharacter | null) => {
     const updatedState = {
       ...gameState,
       relationships: updatedRelationships,
-      moraleStatus: calculateMoraleStatus(game State.resources, updatedRelationships)
+      moraleStatus: calculateMoraleStatus(gameState.resources, updatedRelationships)
     };
 
     setGameState(updatedState);
