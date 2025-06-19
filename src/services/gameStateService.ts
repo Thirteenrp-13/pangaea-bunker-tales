@@ -26,17 +26,71 @@ export interface GameState {
   moraleStatus: 'high' | 'normal' | 'low' | 'critical';
 }
 
+const validateGameState = (data: any): data is GameState => {
+  if (!data || typeof data !== 'object') return false;
+  
+  // Check required properties
+  if (typeof data.day !== 'number' || data.day < 1) return false;
+  
+  // Validate resources
+  if (!data.resources || typeof data.resources !== 'object') return false;
+  const requiredResources = ['water', 'food', 'medicine', 'materials'];
+  for (const resource of requiredResources) {
+    if (typeof data.resources[resource] !== 'number' || data.resources[resource] < 0) {
+      return false;
+    }
+  }
+  
+  // Validate player character
+  if (!data.playerCharacter || typeof data.playerCharacter.name !== 'string') return false;
+  
+  // Validate relationships array
+  if (!Array.isArray(data.relationships)) return false;
+  
+  // Validate completed missions array
+  if (!Array.isArray(data.completedMissions)) return false;
+  
+  // Validate events array
+  if (!Array.isArray(data.events)) return false;
+  
+  // Validate morale status
+  const validMoraleStatuses = ['high', 'normal', 'low', 'critical'];
+  if (!validMoraleStatuses.includes(data.moraleStatus)) return false;
+  
+  return true;
+};
+
 export const getGameState = (): GameState | null => {
   try {
     const saved = localStorage.getItem('isla-pangaea-gamestate');
-    return saved ? JSON.parse(saved) : null;
-  } catch {
+    if (!saved) return null;
+    
+    const parsed = JSON.parse(saved);
+    
+    // Validate the parsed data
+    if (!validateGameState(parsed)) {
+      console.warn('Invalid game state found in localStorage, clearing...');
+      localStorage.removeItem('isla-pangaea-gamestate');
+      return null;
+    }
+    
+    return parsed;
+  } catch (error) {
+    console.error('Error loading game state:', error);
+    // Clear corrupted data
+    localStorage.removeItem('isla-pangaea-gamestate');
     return null;
   }
 };
 
 export const saveGameState = (gameState: GameState): void => {
   try {
+    // Validate before saving
+    if (!validateGameState(gameState)) {
+      console.error('Attempted to save invalid game state');
+      return;
+    }
+    
     localStorage.setItem('isla-pangaea-gamestate', JSON.stringify(gameState));
   } catch (error) {
     console.error('Erro ao salvar estado do jogo:', error);

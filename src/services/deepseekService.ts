@@ -13,14 +13,53 @@ interface DeepSeekResponse {
 }
 
 const DEEPSEEK_API_URL = 'https://llm.chutes.ai/v1/chat/completions';
-const DEEPSEEK_API_KEY = 'cpk_7c825b2df8f24f50a5ec80da06c4f012.8b8d6155c7fe5b3d9d31397e5e77d8f6.1fSVOKU70ZK28yUOKeLThlBJrgpVB7eT';
+
+// Secure API key management
+const getApiKey = (): string | null => {
+  // Try to get from localStorage (user-provided key)
+  const userKey = localStorage.getItem('deepseek_api_key');
+  if (userKey) {
+    return userKey;
+  }
+  
+  // If no user key, return null to prompt user
+  return null;
+};
+
+const validateJSON = (str: string): any => {
+  try {
+    const parsed = JSON.parse(str);
+    // Basic validation - ensure it's an object
+    if (typeof parsed !== 'object' || parsed === null) {
+      throw new Error('Invalid JSON structure');
+    }
+    return parsed;
+  } catch (error) {
+    console.error('JSON validation failed:', error);
+    throw new Error('Invalid JSON response from AI');
+  }
+};
+
+const sanitizeContent = (content: string): string => {
+  // Basic sanitization - remove potential harmful content
+  return content
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/javascript:/gi, '')
+    .trim();
+};
 
 export const callDeepSeek = async (messages: DeepSeekMessage[]): Promise<string> => {
+  const apiKey = getApiKey();
+  
+  if (!apiKey) {
+    throw new Error('API_KEY_MISSING');
+  }
+
   try {
     const response = await fetch(DEEPSEEK_API_URL, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -32,13 +71,26 @@ export const callDeepSeek = async (messages: DeepSeekMessage[]): Promise<string>
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('INVALID_API_KEY');
+      }
       throw new Error(`API Error: ${response.status}`);
     }
 
     const data: DeepSeekResponse = await response.json();
-    return data.choices[0]?.message?.content || 'Sem resposta da IA';
+    const content = data.choices[0]?.message?.content || 'Sem resposta da IA';
+    
+    return sanitizeContent(content);
   } catch (error) {
     console.error('Erro ao chamar DeepSeek:', error);
+    if (error instanceof Error) {
+      if (error.message === 'API_KEY_MISSING') {
+        return 'Por favor, configure sua chave API do DeepSeek.';
+      }
+      if (error.message === 'INVALID_API_KEY') {
+        return 'Chave API inválida. Verifique suas credenciais.';
+      }
+    }
     return 'Erro na comunicação com IA';
   }
 };
@@ -59,7 +111,7 @@ export const generateNPCResponse = async (
     },
     {
       role: 'user',
-      content: playerMessage
+      content: sanitizeContent(playerMessage)
     }
   ];
 
@@ -85,7 +137,7 @@ export const generateMissionOutcome = async (
     },
     {
       role: 'user',
-      content: `Missão: ${missionDescription}
+      content: `Missão: ${sanitizeContent(missionDescription)}
       Stats do jogador: ${JSON.stringify(playerStats)}
       Dificuldade: ${difficulty}
       
@@ -95,7 +147,7 @@ export const generateMissionOutcome = async (
 
   try {
     const response = await callDeepSeek(messages);
-    return JSON.parse(response);
+    return validateJSON(response);
   } catch (error) {
     console.error('Erro ao gerar resultado da missão:', error);
     return {
@@ -126,4 +178,14 @@ export const generateDailyEvent = async (
   ];
 
   return await callDeepSeek(messages);
+};
+
+// Utility function to set API key
+export const setApiKey = (key: string): void => {
+  localStorage.setItem('deepseek_api_key', key);
+};
+
+// Utility function to clear API key
+export const clearApiKey = (): void => {
+  localStorage.removeItem('deepseek_api_key');
 };
