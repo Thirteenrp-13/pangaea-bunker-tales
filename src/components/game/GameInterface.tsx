@@ -42,6 +42,7 @@ export const GameInterface: React.FC<GameInterfaceProps> = ({
             onBack={() => setCurrentView('bunker')}
             resources={resources}
             setResources={setResources}
+            playerCharacter={playerCharacter}
           />
         );
       case 'relationships':

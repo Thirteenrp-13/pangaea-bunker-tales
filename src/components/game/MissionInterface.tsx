@@ -1,8 +1,9 @@
-
 import React, { useState } from 'react';
-import { ArrowLeft, MapPin, Clock, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, MapPin, Clock, AlertTriangle, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useAI } from '../../hooks/useAI';
+import { PlayerCharacter } from '../../pages/Index';
 
 interface MissionInterfaceProps {
   onBack: () => void;
@@ -13,6 +14,7 @@ interface MissionInterfaceProps {
     materials: number;
   };
   setResources: (resources: any) => void;
+  playerCharacter?: PlayerCharacter;
 }
 
 interface Mission {
@@ -29,9 +31,12 @@ interface Mission {
 export const MissionInterface: React.FC<MissionInterfaceProps> = ({ 
   onBack, 
   resources, 
-  setResources 
+  setResources,
+  playerCharacter 
 }) => {
   const [selectedMission, setSelectedMission] = useState<Mission | null>(null);
+  const [missionResult, setMissionResult] = useState<string | null>(null);
+  const { isLoading, executeMissionWithAI } = useAI();
 
   const availableMissions: Mission[] = [
     {
@@ -66,32 +71,6 @@ export const MissionInterface: React.FC<MissionInterfaceProps> = ({
     }
   ];
 
-  const executeMission = (mission: Mission) => {
-    // Simular resultado da missão
-    const success = Math.random() > 0.3; // 70% chance de sucesso
-    
-    if (success) {
-      // Calcular recompensas aleatórias
-      const waterGain = Math.floor(Math.random() * 3) + 2;
-      const foodGain = Math.floor(Math.random() * 3) + 1;
-      
-      setResources({
-        ...resources,
-        water: resources.water + waterGain,
-        food: resources.food + foodGain,
-        materials: resources.materials + 1
-      });
-      
-      alert(`Missão concluída com sucesso!\n+${waterGain} Água\n+${foodGain} Comida\n+1 Material`);
-    } else {
-      // Falha na missão
-      const energyLoss = Math.floor(Math.random() * 10) + 5;
-      alert(`A missão falhou! Você perdeu ${energyLoss} pontos de energia e retornou ao bunker.`);
-    }
-    
-    onBack();
-  };
-
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
       case 'Baixa': return 'text-green-400';
@@ -100,6 +79,78 @@ export const MissionInterface: React.FC<MissionInterfaceProps> = ({
       default: return 'text-slate-400';
     }
   };
+
+  const executeMission = async (mission: Mission) => {
+    if (!playerCharacter) return;
+
+    try {
+      const outcome = await executeMissionWithAI(
+        mission.description,
+        playerCharacter.stats,
+        mission.difficulty
+      );
+
+      setMissionResult(outcome.description);
+
+      if (outcome.success) {
+        // Aplicar recompensas baseadas na IA
+        if (outcome.rewards) {
+          setResources({
+            ...resources,
+            ...outcome.rewards
+          });
+        } else {
+          // Fallback para sistema antigo
+          const waterGain = Math.floor(Math.random() * 3) + 2;
+          const foodGain = Math.floor(Math.random() * 3) + 1;
+          
+          setResources({
+            ...resources,
+            water: resources.water + waterGain,
+            food: resources.food + foodGain,
+            materials: resources.materials + 1
+          });
+        }
+      }
+
+      // Aguardar para mostrar resultado antes de voltar
+      setTimeout(() => {
+        setMissionResult(null);
+        onBack();
+      }, 4000);
+
+    } catch (error) {
+      console.error('Erro ao executar missão:', error);
+      setMissionResult('Algo deu errado durante a missão...');
+      setTimeout(() => {
+        setMissionResult(null);
+        onBack();
+      }, 3000);
+    }
+  };
+
+  if (missionResult) {
+    return (
+      <div className="min-h-screen p-4 max-w-2xl mx-auto flex items-center justify-center">
+        <Card className="bg-slate-800/90 border-slate-700 w-full">
+          <CardHeader className="text-center">
+            <CardTitle className="text-green-400 text-xl flex items-center justify-center">
+              <Bot className="mr-2 h-6 w-6" />
+              Resultado da Missão
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-center">
+            <p className="text-slate-300 text-lg leading-relaxed">
+              {missionResult}
+            </p>
+            <div className="mt-4 text-slate-500 text-sm">
+              Retornando ao bunker...
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen p-4 max-w-2xl mx-auto">
@@ -115,11 +166,12 @@ export const MissionInterface: React.FC<MissionInterfaceProps> = ({
       </div>
 
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-green-400 font-mono mb-2">
+        <h1 className="text-2xl font-bold text-green-400 font-mono mb-2 flex items-center">
+          <Bot className="mr-2 h-6 w-6" />
           EXPLORAÇÃO DA ILHA
         </h1>
         <p className="text-slate-300 text-sm">
-          Escolha cuidadosamente suas missões. Cada região apresenta diferentes riscos e recompensas.
+          Escolha cuidadosamente suas missões. A IA irá determinar os resultados baseado em suas habilidades.
         </p>
       </div>
 
@@ -217,14 +269,23 @@ export const MissionInterface: React.FC<MissionInterfaceProps> = ({
               onClick={() => setSelectedMission(null)}
               variant="outline"
               className="flex-1 border-slate-600 text-slate-300 hover:bg-slate-700"
+              disabled={isLoading}
             >
               Cancelar
             </Button>
             <Button
               onClick={() => executeMission(selectedMission)}
               className="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold"
+              disabled={isLoading}
             >
-              Iniciar Missão
+              {isLoading ? (
+                <>
+                  <Bot className="mr-2 h-4 w-4 animate-spin" />
+                  IA Processando...
+                </>
+              ) : (
+                'Iniciar Missão'
+              )}
             </Button>
           </div>
         </div>
